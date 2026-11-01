@@ -1,0 +1,18 @@
+[build]
+  command = "npm install"
+  publish = "public"
+  functions = "netlify/functions"
+
+# /api/projects -> /.netlify/functions/api/api/projects
+# (the function's basePath strips "/.netlify/functions/api", leaving "/api/..." for Express)
+[[redirects]]
+  from = "/api/*"
+  to = "/.netlify/functions/api/api/:splat"
+  status = 200
+  force = true
+
+[[redirects]]
+  from = "/api"
+  to = "/.netlify/functions/api/api"
+  status = 200
+  force = true

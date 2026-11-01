@@ -27,12 +27,12 @@ app.disable("x-powered-by");
 app.use(helmet());
 
 // 2. CORS. `CLIENT_ORIGIN` may list several origins (comma separated) so the
-//    local dev server and the deployed Vercel domain both work without edits.
+//    local dev server and the deployed front end both work without edits.
 //    An unknown origin is not reflected back, which makes the browser block it.
-//    Vercel preview deployments get a new subdomain on every push, so those are
-//    recognised by pattern unless ALLOW_VERCEL_PREVIEWS=0.
+//    Vercel and Netlify give every deployment its own subdomain, so those two
+//    platforms are recognised by pattern unless ALLOW_PLATFORM_PREVIEWS=0.
 const allowAnyOrigin = env.clientOrigins.includes("*");
-const VERCEL_HOST = /^https:\/\/[a-z0-9-]+(\.[a-z0-9-]+)*\.vercel\.app$/;
+const PLATFORM_HOST = /^https:\/\/[a-z0-9-]+(\.[a-z0-9-]+)*\.(vercel|netlify)\.app$/;
 
 app.use(
   cors({
@@ -40,7 +40,7 @@ app.use(
       if (!origin || allowAnyOrigin || env.clientOrigins.includes(origin)) {
         return callback(null, true);
       }
-      if (env.allowVercelPreviews && VERCEL_HOST.test(origin)) {
+      if (env.allowPlatformPreviews && PLATFORM_HOST.test(origin)) {
         return callback(null, true);
       }
       return callback(null, false);
@@ -62,16 +62,41 @@ app.use(
 );
 
 // 3. JSON body parser with a small ceiling: no legitimate request needs more.
-//    On Vercel a body may already have been parsed before the app is called, so
-//    skip parsing in that case instead of trying to read a consumed stream.
+//    Serverless runtimes differ: Vercel hands over a raw stream, while the
+//    Lambda-style Netlify event arrives with `req.body` already set to the raw
+//    JSON string. Parsing has to cope with all three shapes (undefined, string,
+//    already-parsed object) instead of assuming a stream.
 const jsonParser = express.json({ limit: "32kb" });
-app.use((req, res, next) => {
-  if (req.body !== undefined) {
+
+function jsonBody(req, res, next) {
+  // Already parsed into an object by the runtime.
+  if (req.body && typeof req.body === "object" && !Buffer.isBuffer(req.body)) {
     next();
     return;
   }
+
+  // Present as the raw JSON text: parse it here, the stream is gone.
+  if (typeof req.body === "string") {
+    if (req.body.length === 0) {
+      req.body = {};
+      next();
+      return;
+    }
+    try {
+      req.body = JSON.parse(req.body);
+      next();
+    } catch {
+      const error = new Error("Request body is not valid JSON.");
+      error.status = 400;
+      next(error);
+    }
+    return;
+  }
+
   jsonParser(req, res, next);
-});
+}
+
+app.use(jsonBody);
 
 // 3b. A request without a JSON content type leaves req.body undefined. Give
 //     every handler an object to read, so validation reports 400 instead of a

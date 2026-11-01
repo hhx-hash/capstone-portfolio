@@ -44,10 +44,10 @@ const env = {
     .filter(Boolean),
   // Behind Render/Heroku the client IP arrives in X-Forwarded-For.
   trustProxy: process.env.TRUST_PROXY !== "0",
-  // Vercel gives every deployment its own preview domain, which would otherwise
-  // need a fresh CORS entry on every push. Set ALLOW_VERCEL_PREVIEWS=0 to turn
-  // this off and rely on CLIENT_ORIGIN alone.
-  allowVercelPreviews: process.env.ALLOW_VERCEL_PREVIEWS !== "0",
+  // Vercel and Netlify give every deployment its own subdomain, which would
+  // otherwise need a fresh CORS entry on every push. Set
+  // ALLOW_PLATFORM_PREVIEWS=0 to turn this off and rely on CLIENT_ORIGIN alone.
+  allowPlatformPreviews: process.env.ALLOW_PLATFORM_PREVIEWS !== "0",
 };
 
 env.isProduction = env.nodeEnv === "production";

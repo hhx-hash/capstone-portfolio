@@ -29,11 +29,18 @@ app.use(helmet());
 // 2. CORS. `CLIENT_ORIGIN` may list several origins (comma separated) so the
 //    local dev server and the deployed Vercel domain both work without edits.
 //    An unknown origin is not reflected back, which makes the browser block it.
+//    Vercel preview deployments get a new subdomain on every push, so those are
+//    recognised by pattern unless ALLOW_VERCEL_PREVIEWS=0.
 const allowAnyOrigin = env.clientOrigins.includes("*");
+const VERCEL_HOST = /^https:\/\/[a-z0-9-]+(\.[a-z0-9-]+)*\.vercel\.app$/;
+
 app.use(
   cors({
     origin(origin, callback) {
       if (!origin || allowAnyOrigin || env.clientOrigins.includes(origin)) {
+        return callback(null, true);
+      }
+      if (env.allowVercelPreviews && VERCEL_HOST.test(origin)) {
         return callback(null, true);
       }
       return callback(null, false);
@@ -55,7 +62,16 @@ app.use(
 );
 
 // 3. JSON body parser with a small ceiling: no legitimate request needs more.
-app.use(express.json({ limit: "32kb" }));
+//    On Vercel a body may already have been parsed before the app is called, so
+//    skip parsing in that case instead of trying to read a consumed stream.
+const jsonParser = express.json({ limit: "32kb" });
+app.use((req, res, next) => {
+  if (req.body !== undefined) {
+    next();
+    return;
+  }
+  jsonParser(req, res, next);
+});
 
 // 3b. A request without a JSON content type leaves req.body undefined. Give
 //     every handler an object to read, so validation reports 400 instead of a
